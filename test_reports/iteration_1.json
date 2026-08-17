@@ -1,0 +1,48 @@
+{
+  "summary": "First-finish smoke tests for Deal Hunter AI MVP. Backend auth, product listing/filters, feed endpoints, categories, product-by-slug, tracking (click 302 + conversion incrementing on confirmed only), AI search, admin dashboard/stats/simulator/settings/strategist/daily-plan/quick-start/reports, AI content, opportunity-score, product CRUD, and subscribers all verified. Frontend home, search, product detail (with correct /api/track/click href), admin login, and all admin pages (products, ai-control, ai-content, reports) render with expected data-testids.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/login returns token + admin user; wrong password 401",
+    "GET /api/auth/me works with Bearer, 401 without",
+    "GET /api/products returns total=20, items list",
+    "GET /api/products/{trending,ai-picks,best-value,price-drops,new} all return 8-item arrays",
+    "GET /api/products/slug/<real-slug> returns product + related; unknown slug returns 404",
+    "GET /api/categories returns 7 seeded categories (technology, gaming, audio, home, pets, fitness, smartphones)",
+    "GET /api/track/click/{id} returns 302 redirect",
+    "POST /api/track/conversion confirmed increments sales/commission (sales=1, commission_total=2.0); pending does not",
+    "POST /api/ai/search returns {filters, results, query}",
+    "Admin endpoints return 401 without token (verified on dashboard/stats)",
+    "POST /api/admin/products (with `name` field) creates product with unique slug; PUT updates; DELETE returns deleted:1",
+    "POST /api/admin/dashboard/settings persists {daily_sales_goal, growth_mode}",
+    "POST /api/admin/dashboard/simulator with (10,2,5) returns required_visitors=500, expected_commission=50",
+    "GET /api/admin/ai/strategist returns recommendations(6), mode, mode_note",
+    "POST /api/admin/ai/content returns full draft dict with content_len=757",
+    "GET /api/admin/ai/opportunity-score/{id} returns score/label/color/ctr",
+    "POST /api/admin/ai/daily-plan returns target/mode/tasks(5)",
+    "GET /api/admin/reports/{daily,weekly,monthly} all 200",
+    "POST /api/subscribers idempotent (200 on duplicate)",
+    "Frontend home renders hero-search-input, 7 category chips, 24 product cards",
+    "Hero search navigates to /search?q=gaming%20headphones",
+    "Product detail page shows pd-title and pd-cta with href pointing to /api/track/click/{id}",
+    "Admin login with seeded creds redirects to /admin dashboard",
+    "/admin/products shows add-product-btn; /admin/ai-control has goal-5, mode-balanced, sim-run, plan-generate; /admin/ai-content has content-generate; /admin/reports has period-daily/weekly with metrics + Top Products table"
+  ],
+  "failed": [
+    {
+      "area": "docs/testing brief",
+      "issue": "Review request referenced slug 'smart-deal-hub-1' which does not exist; actual slugs are generated from product names (e.g., 'bowflex-selecttech-552-dumbbells'). Not a bug, but the example slug in the brief is stale.",
+      "evidence": "GET /api/products/slug/smart-deal-hub-1 -> 404; real slug returns 200 with related array",
+      "priority": "LOW"
+    },
+    {
+      "area": "backend/api contract",
+      "issue": "ProductIn requires `name` field (not `title`). The problem statement mentioned 'title' in card testids but API field is `name`. Confirming API contract for main agent's awareness.",
+      "evidence": "POST /api/admin/products with `title` -> 422 missing `name`; with `name` -> 200",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
