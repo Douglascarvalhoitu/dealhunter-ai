@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import PublicLayout from "../components/PublicLayout";
 import ProductCard from "../components/ProductCard";
+import PriceAlert from "../components/PriceAlert";
 import api, { BACKEND_URL } from "../lib/api";
 import { money, discountPct, trackClickUrl } from "../lib/format";
 import { Check, X, Sparkles, Store, Tag } from "lucide-react";
@@ -52,6 +53,8 @@ export default function ProductDetail() {
               </a>
             </div>
             <p className="mt-3 text-xs text-slate-500">Affiliate link. Prices and availability may change.</p>
+
+            <PriceAlert product={p} />
 
             {p.features?.length > 0 && (
               <div className="mt-8">

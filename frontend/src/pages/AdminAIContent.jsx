@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import AdminLayout from "../components/AdminLayout";
 import api from "../lib/api";
-import { PenSquare, Sparkles, Copy } from "lucide-react";
+import { PenSquare, Sparkles, Copy, Send } from "lucide-react";
+import { toast } from "sonner";
 
 const TYPES = [
   ["description", "Product Description"],
@@ -86,7 +87,21 @@ export default function AdminAIContent() {
           <div className="space-y-3 max-h-[500px] overflow-y-auto dh-scrollbar">
             {drafts.slice(0, 20).map((d) => (
               <div key={d.id} className="rounded-lg border border-white/10 p-3">
-                <div className="text-xs text-slate-400 mb-1">{d.content_type} · {new Date(d.created_at).toLocaleString()}</div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs text-slate-400">{d.content_type} · {new Date(d.created_at).toLocaleString()}</div>
+                  {d.content_type === "seo_article" && d.status !== "published" && (
+                    <button data-testid={`publish-${d.id}`} onClick={async () => {
+                      const title = window.prompt("Post title?", "New AI Deal Guide");
+                      if (!title) return;
+                      try {
+                        await api.post("/admin/blog/publish", { draft_id: d.id, title, meta_description: (d.content || "").slice(0, 150) });
+                        toast.success("Published to /blog");
+                        const r = await api.get("/admin/ai/drafts"); setDrafts(r.data);
+                      } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+                    }} className="text-xs text-emerald-300 hover:underline inline-flex items-center gap-1"><Send size={12} /> Publish as blog</button>
+                  )}
+                  {d.status === "published" && <span className="text-[10px] uppercase text-emerald-300">published</span>}
+                </div>
                 <div className="text-sm text-slate-100 line-clamp-3 whitespace-pre-wrap">{d.content}</div>
               </div>
             ))}

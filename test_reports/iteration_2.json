@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 2 — Verified all new features: Price Alerts (create/list/check-triggers), Blog publisher (draft->publish->list->get->delete with slug uniqueness and draft status transition), Feed Import (create + tag= append + idempotent update by affiliate_url), Change Password (wrong current 400, short new 400, valid change + login with new + reset back), Site Settings GET defaults + POST persistence, sitemap.xml application/xml with product/category/blog URLs, robots.txt text/plain with Sitemap link. Frontend: header nav (Favorites/Compare/Blog) present; ProductCard heart+compare add to /favorites and /compare (Best Value badge on cheapest, up to 4); /product/:slug PriceAlert form calls /api/alerts and shows 'Alert saved' toast; /blog empty state shown; /admin/import textarea + Import Products + Check triggers now all functional (Created: 1); /admin/settings shows Profile, Change Password form with client-side mismatch ('Passwords don't match') + min-8 ('Min 8 characters') validation, and Site Settings save works. Admin sidebar shows new links 'Import & Alerts' and 'Settings'. Admin password reset back to DealHunter2026! (verified via login).",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passed": [
+    "POST /api/alerts 200 with valid product, 404 for unknown product_id",
+    "GET /api/admin/alerts requires auth (401 without) and returns created alert",
+    "POST /api/admin/alerts/check returns {triggered_count, triggered} and marks alert triggered when target >= current price",
+    "POST /api/admin/blog/publish creates post with unique slug; GET /api/blog lists it; GET /api/blog/{slug} returns full content; draft.status becomes 'published'; DELETE /api/admin/blog/{id} removes and subsequent GET 404s",
+    "GET /api/sitemap.xml -> 200 application/xml with product/category/blog URLs",
+    "GET /api/robots.txt -> 200 text/plain with User-agent and Sitemap:",
+    "POST /api/admin/import/feed creates products with unique slug and appends tag=dhai-20 when missing; repeat import matches by affiliate_url and updates (created=0, updated=1)",
+    "POST /api/auth/change-password: wrong current -> 400 'Current password is incorrect'; new_password < 8 -> 400; valid change succeeds and new password logs in; reset back to seeded password works",
+    "GET /api/admin/site-settings returns defaults (site_name, tagline, default_country, default_currency, affiliate_disclosure); POST persists tagline + support_email",
+    "Frontend: Favorites & Compare pages populate from localStorage; Compare shows Price/Discount/Store/Category/Features/Action rows and 'Best Value' badge on cheapest",
+    "Frontend: PriceAlert form on /product/:slug submits and displays 'Alert saved' toast",
+    "Frontend: Blog list shows empty-state testid=blog-empty when no posts",
+    "Frontend: Admin sidebar contains Import & Alerts + Settings links; /admin/import has import-json, import-run, alerts-check; import-result shows 'Created: 1 Updated: 0 Errors: 0'",
+    "Frontend: /admin/settings has all testids (pw-current, pw-new, pw-confirm, pw-submit, site-name, site-tagline, site-save); mismatch -> 'Passwords don't match' toast; short new -> 'Min 8 characters' toast; Save Site Settings persists"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter2_features.py",
+    "/app/test_reports/pytest/iter2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FavoritesPage.jsx contains a leftover no-op Promise.all(ids.map(...)) block (lines 13-15) that dispatches N /api/products calls just to discard them before doing the real fetch. Harmless but wasteful — should be deleted.",
+    "Feed idempotency is keyed on the full affiliate_url string (including any appended tag=). If associate_tag changes between imports for the same base URL, the second import will create a duplicate instead of updating. Consider normalizing by ASIN/base URL for stronger dedup.",
+    "server.py hardcodes SITE_URL default to the current preview URL (sitemap/robots). Move to env var without a default, so misconfig fails loudly.",
+    "server.py is 1040 lines — consider splitting into routers (auth, products, admin, blog, alerts, feed, seo) for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter2_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100%"},
+  "test_credentials": "admin@dealhunter.ai / DealHunter2026! (verified reset after change-password test)",
+  "seed_data_creation": "None persistent. Created transient TEST_ price alerts, one imported/deleted TEST product, one blog post (created and deleted within test). Site settings tagline reset to default.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Iteration-2 features (favorites/compare/blog/price alerts/import/settings/change-password) verified end-to-end on public URL. Pytest suite at /app/backend/tests/test_iter2_features.py is idempotent and can be re-run for regression. Site tagline defaults restored; admin password reset to seed."
+}

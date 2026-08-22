@@ -82,6 +82,18 @@ class LoginIn(BaseModel):
     email: EmailStr
     password: str
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+class SiteSettingsIn(BaseModel):
+    site_name: str = "Deal Hunter AI"
+    tagline: str = "Find Better Deals With AI"
+    support_email: str = ""
+    default_country: str = "US"
+    default_currency: str = "USD"
+    affiliate_disclosure: str = "As an affiliate, we may earn a commission from qualifying purchases."
+
 class ProductIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
     name: str
@@ -147,6 +159,37 @@ class AiSearchIn(BaseModel):
 
 class SubscribeIn(BaseModel):
     email: EmailStr
+
+class PriceAlertIn(BaseModel):
+    email: EmailStr
+    product_id: str
+    target_price: float
+
+class BlogPublishIn(BaseModel):
+    draft_id: str
+    title: str
+    meta_description: str = ""
+    cover_image: str = ""
+
+class FeedItemIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    name: str
+    description: str = ""
+    category: str = "technology"
+    image: str = ""
+    price: float
+    old_price: Optional[float] = None
+    store: str = "Amazon"
+    network: str = "Amazon Associates"
+    affiliate_url: str
+    commission_pct: float = 4.0
+    country: str = "US"
+    currency: str = "USD"
+    features: List[str] = []
+
+class FeedImportIn(BaseModel):
+    items: List[FeedItemIn]
+    associate_tag: Optional[str] = None
 
 # ---------------- Startup ----------------
 @app.on_event("startup")
@@ -278,6 +321,28 @@ async def login(inp: LoginIn):
 @api.get("/auth/me")
 async def me(admin=Depends(get_current_admin)):
     return admin
+
+@api.post("/auth/change-password")
+async def change_password(inp: ChangePasswordIn, admin=Depends(get_current_admin)):
+    user = await db.users.find_one({"id": admin["id"]})
+    if not user or not verify_password(inp.current_password, user["password_hash"]):
+        raise HTTPException(400, "Current password is incorrect")
+    if len(inp.new_password) < 8:
+        raise HTTPException(400, "New password must be at least 8 characters")
+    await db.users.update_one({"id": admin["id"]}, {"$set": {"password_hash": hash_password(inp.new_password)}})
+    return {"ok": True, "message": "Password updated"}
+
+@api.get("/admin/site-settings")
+async def get_site_settings(admin=Depends(get_current_admin)):
+    s = await db.settings.find_one({"key": "site"}, {"_id": 0}) or {}
+    s.pop("key", None)
+    defaults = SiteSettingsIn().model_dump()
+    return {**defaults, **s}
+
+@api.post("/admin/site-settings")
+async def set_site_settings(inp: SiteSettingsIn, admin=Depends(get_current_admin)):
+    await db.settings.update_one({"key": "site"}, {"$set": inp.model_dump()}, upsert=True)
+    return {"ok": True, **inp.model_dump()}
 
 # ---------------- Categories ----------------
 @api.get("/categories")
@@ -807,6 +872,153 @@ async def quick_start(admin=Depends(get_current_admin)):
     done_count = sum(1 for s in steps if s["done"])
     progress = int(done_count / len(steps) * 100)
     return {"steps": steps, "progress": progress}
+
+# ---------------- Price Alerts ----------------
+@api.post("/alerts")
+async def create_alert(inp: PriceAlertIn):
+    p = await db.products.find_one({"id": inp.product_id})
+    if not p:
+        raise HTTPException(404, "Product not found")
+    await db.price_alerts.insert_one({
+        "id": str(uuid.uuid4()),
+        "email": inp.email.lower(),
+        "product_id": inp.product_id,
+        "product_name": p["name"],
+        "target_price": inp.target_price,
+        "status": "active",
+        "notified_at": None,
+        "created_at": now_iso(),
+    })
+    return {"ok": True, "message": "We'll notify you when the price drops."}
+
+@api.get("/admin/alerts")
+async def list_alerts(admin=Depends(get_current_admin)):
+    items = await db.price_alerts.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
+    return items
+
+@api.post("/admin/alerts/check")
+async def check_alerts(admin=Depends(get_current_admin)):
+    """Evaluate active alerts: mark 'triggered' when current price <= target."""
+    active = await db.price_alerts.find({"status": "active"}, {"_id": 0}).to_list(1000)
+    triggered = []
+    for a in active:
+        p = await db.products.find_one({"id": a["product_id"]}, {"_id": 0})
+        if p and p["price"] <= a["target_price"]:
+            await db.price_alerts.update_one(
+                {"id": a["id"]},
+                {"$set": {"status": "triggered", "notified_at": now_iso(), "current_price": p["price"]}}
+            )
+            triggered.append({"email": a["email"], "product": p["name"], "target": a["target_price"], "current": p["price"]})
+    return {"triggered_count": len(triggered), "triggered": triggered,
+            "note": "Email delivery requires an email integration (Resend/SendGrid). Alerts are marked triggered on the server."}
+
+# ---------------- Blog / SEO Publisher ----------------
+@api.post("/admin/blog/publish")
+async def blog_publish(inp: BlogPublishIn, admin=Depends(get_current_admin)):
+    draft = await db.content_drafts.find_one({"id": inp.draft_id}, {"_id": 0})
+    if not draft:
+        raise HTTPException(404, "Draft not found")
+    product = await db.products.find_one({"id": draft["product_id"]}, {"_id": 0})
+    base_slug = slugify(inp.title) or f"post-{str(uuid.uuid4())[:8]}"
+    slug = base_slug
+    i = 1
+    while await db.blog_posts.find_one({"slug": slug}):
+        i += 1
+        slug = f"{base_slug}-{i}"
+    post = {
+        "id": str(uuid.uuid4()),
+        "slug": slug,
+        "title": inp.title,
+        "meta_description": inp.meta_description or (draft["content"][:155] + "…"),
+        "cover_image": inp.cover_image or (product["image"] if product else ""),
+        "content": draft["content"],
+        "product_id": draft["product_id"],
+        "product_name": product["name"] if product else "",
+        "product_slug": product.get("slug") if product else "",
+        "published_at": now_iso(),
+    }
+    await db.blog_posts.insert_one(post)
+    await db.content_drafts.update_one({"id": inp.draft_id}, {"$set": {"status": "published", "blog_slug": slug}})
+    post.pop("_id", None)
+    return post
+
+@api.get("/blog")
+async def list_blog():
+    items = await db.blog_posts.find({}, {"_id": 0, "content": 0}).sort([("published_at", -1)]).limit(50).to_list(50)
+    return items
+
+@api.get("/blog/{slug}")
+async def get_blog(slug: str):
+    p = await db.blog_posts.find_one({"slug": slug}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Not found")
+    return p
+
+@api.delete("/admin/blog/{pid}")
+async def delete_blog(pid: str, admin=Depends(get_current_admin)):
+    r = await db.blog_posts.delete_one({"id": pid})
+    return {"deleted": r.deleted_count}
+
+# ---------------- Sitemap ----------------
+@api.get("/sitemap.xml")
+async def sitemap():
+    from fastapi.responses import Response
+    base = os.environ.get("SITE_URL", "https://smart-deal-hub-1.preview.emergentagent.com")
+    urls = [f"{base}/", f"{base}/deals", f"{base}/blog"]
+    async for p in db.products.find({"status": "active"}, {"slug": 1, "_id": 0}):
+        urls.append(f"{base}/product/{p['slug']}")
+    async for c in db.categories.find({}, {"slug": 1, "_id": 0}):
+        urls.append(f"{base}/category/{c['slug']}")
+    async for b in db.blog_posts.find({}, {"slug": 1, "_id": 0}):
+        urls.append(f"{base}/blog/{b['slug']}")
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for u in urls:
+        body += f"  <url><loc>{u}</loc></url>\n"
+    body += "</urlset>\n"
+    return Response(content=body, media_type="application/xml")
+
+@api.get("/robots.txt")
+async def robots():
+    from fastapi.responses import Response
+    base = os.environ.get("SITE_URL", "https://smart-deal-hub-1.preview.emergentagent.com")
+    body = f"User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: {base}/api/sitemap.xml\n"
+    return Response(content=body, media_type="text/plain")
+
+# ---------------- Feed Import (Amazon & compatible) ----------------
+@api.post("/admin/import/feed")
+async def import_feed(inp: FeedImportIn, admin=Depends(get_current_admin)):
+    """Bulk import products from a JSON feed. Compatible with Amazon Associates output,
+    or any generic e-commerce feed with the fields defined in FeedItemIn."""
+    created, updated, errors = 0, 0, []
+    for item in inp.items:
+        try:
+            d = item.model_dump()
+            # If an associate_tag is provided and affiliate_url doesn't already carry one, append it.
+            if inp.associate_tag and "tag=" not in d["affiliate_url"]:
+                sep = "&" if "?" in d["affiliate_url"] else "?"
+                d["affiliate_url"] = f"{d['affiliate_url']}{sep}tag={inp.associate_tag}"
+            existing = await db.products.find_one({"affiliate_url": d["affiliate_url"]})
+            if existing:
+                await db.products.update_one({"id": existing["id"]}, {"$set": {
+                    "price": d["price"], "old_price": d.get("old_price"),
+                    "name": d["name"], "image": d["image"] or existing.get("image", ""),
+                }})
+                updated += 1
+                continue
+            base_slug = slugify(d["name"]) or str(uuid.uuid4())[:8]
+            slug = base_slug
+            i = 1
+            while await db.products.find_one({"slug": slug}):
+                i += 1
+                slug = f"{base_slug}-{i}"
+            p = Product(**d).model_dump()
+            p["slug"] = slug
+            p["is_demo"] = False
+            await db.products.insert_one(p)
+            created += 1
+        except Exception as e:
+            errors.append({"name": item.name if hasattr(item, 'name') else "?", "error": str(e)})
+    return {"created": created, "updated": updated, "errors": errors, "total": len(inp.items)}
 
 # ---------------- Mount ----------------
 app.include_router(api)

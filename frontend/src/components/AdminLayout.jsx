@@ -1,6 +1,6 @@
 import { NavLink, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { LayoutDashboard, Package, Sparkles, PenSquare, Network, BarChart3, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Sparkles, PenSquare, Network, BarChart3, LogOut, Upload, Settings } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets-0z36b82j.emergentagent.net/job_smart-deal-hub-1/artifacts/tkme36ut_ChatGPT%20Image%2017%20de%20ago.%20de%202026%2C%2018_42_36.png";
 
@@ -10,7 +10,9 @@ const NAV = [
   { to: "/admin/ai-control", label: "AI Sales Control", Icon: Sparkles, testId: "nav-ai-control" },
   { to: "/admin/ai-content", label: "AI Content", Icon: PenSquare, testId: "nav-ai-content" },
   { to: "/admin/networks", label: "Affiliate Networks", Icon: Network, testId: "nav-networks" },
+  { to: "/admin/import", label: "Import & Alerts", Icon: Upload, testId: "nav-import" },
   { to: "/admin/reports", label: "Reports", Icon: BarChart3, testId: "nav-reports" },
+  { to: "/admin/settings", label: "Settings", Icon: Settings, testId: "nav-settings" },
 ];
 
 export default function AdminLayout({ children }) {

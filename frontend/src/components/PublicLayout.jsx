@@ -32,6 +32,9 @@ export default function PublicLayout({ children }) {
             <Link to="/deals" data-testid="nav-deals" className="hover:text-[var(--dh-navy)]">Deals</Link>
             <Link to="/category/gaming" data-testid="nav-gaming" className="hover:text-[var(--dh-navy)]">Gaming</Link>
             <Link to="/category/audio" data-testid="nav-audio" className="hover:text-[var(--dh-navy)]">Audio</Link>
+            <Link to="/favorites" data-testid="nav-favorites" className="hover:text-[var(--dh-navy)]">Favorites</Link>
+            <Link to="/compare" data-testid="nav-compare" className="hover:text-[var(--dh-navy)]">Compare</Link>
+            <Link to="/blog" data-testid="nav-blog" className="hover:text-[var(--dh-navy)]">Blog</Link>
             <Link to="/admin/login" data-testid="nav-admin" className="px-4 h-9 grid place-items-center rounded-full border border-slate-300 hover:bg-slate-100">Admin</Link>
           </nav>
           <Menu className="md:hidden text-slate-700" />
