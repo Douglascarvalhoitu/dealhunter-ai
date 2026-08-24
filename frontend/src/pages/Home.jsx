@@ -31,7 +31,14 @@ export default function Home() {
 
   useEffect(() => {
     SECTIONS.forEach(async (s) => {
-      try { const r = await api.get(s.url); setSections((prev) => ({ ...prev, [s.key]: r.data })); } catch {}
+      try {
+        const r = await api.get(s.url);
+        const data = r?.data;
+        const arr = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+        setSections((prev) => ({ ...prev, [s.key]: arr }));
+      } catch {
+        setSections((prev) => ({ ...prev, [s.key]: [] }));
+      }
     });
   }, []);
 
@@ -92,7 +99,8 @@ export default function Home() {
 
       {/* Sections */}
       {SECTIONS.map(({ key, title, Icon }) => {
-        const items = sections[key] || [];
+        const raw = sections[key];
+        const items = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : []);
         if (!items.length) return null;
         return (
           <section key={key} className="max-w-7xl mx-auto px-6 mt-14">
